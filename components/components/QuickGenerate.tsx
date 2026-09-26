@@ -1,0 +1,1063 @@
+﻿'use client';
+
+import React, { useState } from 'react';
+import {
+  Sparkles,
+  Loader,
+  FileText,
+  ShoppingCart,
+  Briefcase,
+  Camera,
+  CheckCircle,
+  Download,
+  ExternalLink,
+  Image,
+  Wand2,
+} from 'lucide-react';
+
+const templates = [
+  {
+    id: 'ecommerce',
+    name: '🛒 Интернет-магазин',
+    icon: ShoppingCart,
+    tz: `Название: TechParts Pro
+Стиль: Тёмный техно с неоновыми акцентами
+Товары:
+1. NVIDIA RTX 5090 — 189 990₽
+2. NVIDIA RTX 5080 — 129 990₽
+3. Intel Core i9 — 59 990₽
+4. DDR5 32GB — 14 990₽`,
+  },
+  {
+    id: 'agency',
+    name: '💼 Агентство',
+    icon: Briefcase,
+    tz: `Название: Creative Agency
+Стиль: Минимализм, светлая тема
+Услуги: Веб-разработка, Дизайн, Маркетинг, SMM
+Структура: Главная, Услуги, Кейсы, О нас, Контакты`,
+  },
+  {
+    id: 'portfolio',
+    name: '📸 Портфолио',
+    icon: Camera,
+    tz: `Название: Alex Designer
+Стиль: Тёмная тема, крупные фото
+Разделы: Главная, Работы, Обо мне, Услуги, Контакты`,
+  },
+  {
+    id: 'custom',
+    name: '📝 Своё ТЗ',
+    icon: FileText,
+    tz: '',
+  },
+];
+
+type Product = {
+  id: string;
+  name: string;
+  price: string;
+  priceNumber: number;
+  category: string;
+  imagePrompt: string;
+  imageUrl?: string;
+};
+
+type SiteData = {
+  name: string;
+  description: string;
+  sections: string[];
+  products: Product[];
+};
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function toPriceNumber(value: string) {
+  const digits = value.replace(/[^\d]/g, '');
+  return digits ? Number(digits) : 0;
+}
+
+function formatPrice(value: number) {
+  if (!value) return 'Цена по запросу';
+  return `${new Intl.NumberFormat('ru-RU').format(value)} ₽`;
+}
+
+function makePlaceholderImage(label: string, category: string) {
+  const safeLabel = escapeHtml(label).slice(0, 34);
+  const safeCategory = escapeHtml(category).slice(0, 24);
+
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+      <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#0f172a"/>
+          <stop offset="50%" stop-color="#172554"/>
+          <stop offset="100%" stop-color="#2e1065"/>
+        </linearGradient>
+        <radialGradient id="glow" cx="28%" cy="24%" r="76%">
+          <stop offset="0%" stop-color="#00d4ff" stop-opacity=".52"/>
+          <stop offset="100%" stop-color="#00d4ff" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+      <rect width="800" height="600" fill="url(#bg)"/>
+      <rect width="800" height="600" fill="url(#glow)"/>
+      <rect x="208" y="116" width="384" height="252" rx="30" fill="#080d1a" stroke="#00d4ff" stroke-opacity=".86" stroke-width="4"/>
+      <rect x="242" y="150" width="316" height="184" rx="18" fill="#172554"/>
+      <circle cx="400" cy="242" r="64" fill="#7b2cbf"/>
+      <path d="M366 242h68M400 208v68" stroke="#fff" stroke-width="13" stroke-linecap="round"/>
+      <text x="400" y="435" fill="#a5f3fc" font-family="Arial, sans-serif" font-size="22" text-anchor="middle">${safeCategory}</text>
+      <text x="400" y="484" fill="#ffffff" font-family="Arial, sans-serif" font-size="30" font-weight="700" text-anchor="middle">${safeLabel}</text>
+      <text x="400" y="530" fill="#94a3b8" font-family="Arial, sans-serif" font-size="18" text-anchor="middle">Изображение будет добавлено генератором</text>
+    </svg>
+  `.trim();
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function createImagePrompt(name: string, category: string) {
+  return `${category}, ${name}, premium e-commerce product photography, isolated object, dark studio background, cyan and violet rim lighting, no text, no watermark, square composition`;
+}
+
+function parseTZ(source: string): SiteData {
+  const lines = source
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const data: SiteData = {
+    name: 'Мой сайт',
+    description: 'Современный сайт с удобным каталогом и быстрым оформлением заказа.',
+    sections: [],
+    products: [],
+  };
+
+  let activeCategory = 'Каталог';
+  let productsBlock = false;
+
+  const addProduct = (name: string, rawPrice: string, category = activeCategory) => {
+    const cleanName = name.trim();
+    if (!cleanName) return;
+
+    const priceNumber = toPriceNumber(rawPrice);
+    const price = priceNumber ? formatPrice(priceNumber) : 'Цена по запросу';
+
+    const exists = data.products.some(
+      (product) => product.name.toLowerCase() === cleanName.toLowerCase()
+    );
+
+    if (!exists) {
+      data.products.push({
+        id: `product-${data.products.length + 1}`,
+        name: cleanName,
+        price,
+        priceNumber,
+        category,
+        imagePrompt: createImagePrompt(cleanName, category),
+      });
+    }
+  };
+
+  for (const line of lines) {
+    const normalized = line.toLowerCase();
+
+    if (normalized.startsWith('название:')) {
+      data.name = line.slice(line.indexOf(':') + 1).trim() || 'Мой сайт';
+      continue;
+    }
+
+    if (normalized.startsWith('описание:')) {
+      data.description =
+        line.slice(line.indexOf(':') + 1).trim() || data.description;
+      continue;
+    }
+
+    if (
+      normalized.startsWith('структура:') ||
+      normalized.startsWith('разделы:')
+    ) {
+      const sectionsValue = line.slice(line.indexOf(':') + 1).trim();
+      data.sections = sectionsValue
+        .split(',')
+        .map((section) => section.trim())
+        .filter(Boolean);
+      continue;
+    }
+
+    if (
+      normalized.startsWith('товары:') ||
+      normalized.startsWith('товары ') ||
+      normalized.startsWith('продукты:') ||
+      normalized.startsWith('каталог:')
+    ) {
+      productsBlock = true;
+      const value = line.includes(':')
+        ? line.slice(line.indexOf(':') + 1).trim()
+        : '';
+
+      if (value) {
+        value
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .forEach((item) => {
+            const match = item.match(/^(.+?)\s*(?:—|-)\s*([\d\s]+(?:₽|руб\.?|rub))$/iu);
+            if (match) {
+              addProduct(match[1], match[2]);
+            } else {
+              addProduct(item, '');
+            }
+          });
+      }
+      continue;
+    }
+
+    if (/^[а-яёa-z][а-яёa-z\s-]{2,}:$/iu.test(line)) {
+      activeCategory = line.replace(':', '').trim();
+      continue;
+    }
+
+    const numberedProduct = line.match(
+      /^(?:[-•–—]|\d+[.)])\s*(.+?)\s*(?:—|-)\s*([\d\s]+(?:[.,]\d+)?\s*(?:₽|руб\.?|rub))\s*$/iu
+    );
+
+    if (numberedProduct) {
+      productsBlock = true;
+      addProduct(numberedProduct[1], numberedProduct[2]);
+      continue;
+    }
+
+    if (productsBlock) {
+      const plainProduct = line.match(
+        /^(?:[-•–—]|\d+[.)])\s*(.+?)\s*$/u
+      );
+
+      if (plainProduct && plainProduct[1].length > 2) {
+        addProduct(plainProduct[1], '');
+      }
+    }
+  }
+
+  if (data.products.length === 0) {
+    const fallbackNames = ['Товар 1', 'Товар 2', 'Товар 3', 'Товар 4'];
+
+    data.products = fallbackNames.map((name, index) => ({
+      id: `product-${index + 1}`,
+      name,
+      price: 'Цена по запросу',
+      priceNumber: 0,
+      category: 'Каталог',
+      imagePrompt: createImagePrompt(name, 'Каталог'),
+    }));
+  }
+
+  return data;
+}
+
+export default function QuickGenerate({
+  onComplete,
+  onBack,
+}: {
+  onComplete: () => void;
+  onBack: () => void;
+}) {
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [tz, setTz] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [showPreview, setShowPreview] = useState(false);
+
+  const [generatedData, setGeneratedData] = useState<SiteData | null>(null);
+  const [isGeneratingImages, setIsGeneratingImages] = useState(false);
+  const [backgroundUrl, setBackgroundUrl] = useState<string | null>(null);
+  const [isGeneratingBackground, setIsGeneratingBackground] = useState(false);
+  const [hasNeon, setHasNeon] = useState(false);
+  const [previewKey, setPreviewKey] = useState(0);
+  const [previewHtml, setPreviewHtml] = useState('');
+
+  const handleSelectTemplate = (templateId: string) => {
+    const template = templates.find((item) => item.id === templateId);
+
+    if (template) {
+      setSelectedTemplate(templateId);
+      setTz(template.tz);
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (!tz.trim()) {
+      alert('Введите подробное ТЗ для генерации сайта.');
+      return;
+    }
+
+    setIsGenerating(true);
+    setProgress(0);
+
+    for (let value = 0; value <= 100; value += 10) {
+      setProgress(value);
+      await new Promise((resolve) => setTimeout(resolve, 160));
+    }
+
+    const data = parseTZ(tz);
+    setGeneratedData(data);
+
+    const text = tz.toLowerCase();
+    const neonKeywords = ['неон', 'neon', 'rgb', 'подсветк', 'светящ', 'glow', 'cyan', 'violet', 'фиолет'];
+    const neonFound = neonKeywords.some(k => text.includes(k));
+    setHasNeon(neonFound);
+
+    setIsGenerating(false);
+    setShowPreview(true);
+  };
+
+  React.useEffect(() => {
+    if (!generatedData || !showPreview) return;
+    setPreviewHtml(getSiteHTML());
+  }, [generatedData, showPreview, backgroundUrl, hasNeon]);
+
+  React.useEffect(() => {
+    if (!previewHtml) return;
+    setPreviewKey(prev => prev + 1);
+  }, [previewHtml]);
+
+  async function generateProductImages() {
+    if (!generatedData || !generatedData.products || generatedData.products.length === 0) return;
+    
+    setIsGeneratingImages(true);
+    
+    try {
+      let pythonImages: Record<string, string> = {};
+      try {
+        const pythonResponse = await fetch('/api/get-product-images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ products: generatedData.products.map(p => ({ name: p.name, category: p.category || '' })) }),
+        });
+        if (pythonResponse.ok) pythonImages = await pythonResponse.json();
+      } catch (e) { console.warn('Python image selector не доступен:', e); }
+      
+      const accessKey: string = process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY || '';
+      
+      const translations: Record<string, string> = {
+        'кофе': 'coffee beans', 'кружка': 'ceramic mug', 'френч-пресс': 'french press',
+        'кофемолка': 'coffee grinder', 'сироп': 'vanilla syrup', 'молоко': 'oat milk',
+        'масло': 'motor oil', 'колодки': 'brake pads', 'фильтр': 'air filter',
+        'свеча': 'spark plug', 'аккумулятор': 'car battery', 'амортизатор': 'shock absorber',
+      };
+      
+      const updatedProducts = await Promise.all(
+        generatedData.products.map(async (product) => {
+          if (pythonImages[product.name]) return { ...product, imageUrl: pythonImages[product.name] };
+          
+          if (accessKey) {
+            let searchQuery = product.name.toLowerCase();
+            for (const [ru, en] of Object.entries(translations)) {
+              if (searchQuery.includes(ru)) { searchQuery = en; break; }
+            }
+            searchQuery = encodeURIComponent(searchQuery);
+            try {
+              const response = await fetch(`https://api.unsplash.com/search/photos?query=${searchQuery}&per_page=1&orientation=landscape`, {
+                headers: { 'Authorization': `Client-ID ${accessKey}` },
+              });
+              const data = await response.json();
+              if (data.results?.length > 0) return { ...product, imageUrl: data.results[0].urls.small };
+            } catch (e) { console.warn(`Unsplash ошибка для "${product.name}":`, e); }
+          }
+          
+          const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='800' height='600'><rect width='800' height='600' fill='#1a1a2e'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#00d4ff' font-family='Arial' font-size='32' font-weight='bold'>${product.name}</text></svg>`;
+          return { ...product, imageUrl: 'data:image/svg+xml;utf8,' + encodeURIComponent(svg) };
+        })
+      );
+      
+      setGeneratedData(prev => prev ? ({ ...prev, products: updatedProducts }) : null);
+      setPreviewKey(prev => prev + 1);
+    } catch (error) {
+      console.error('Ошибка генерации изображений:', error);
+    } finally {
+      setIsGeneratingImages(false);
+    }
+  }
+
+async function generateBackground() {
+    if (!generatedData?.name) return;
+
+    setIsGeneratingBackground(true);
+
+    const prompt = `modern e-commerce hero object, clean composition, isolated subject, for online store "${generatedData.name}", ${generatedData.description}, soft dark background, subtle cyan and violet rim light, no text, no logo, no solid background wall, object suitable for overlay on gradient background, high quality, cinematic lighting, wide composition`;
+
+    const seed = Date.now();
+    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1920&height=1080&nologo=true&seed=${seed}`;
+
+    setBackgroundUrl(url);
+
+    if (showPreview) {
+      setPreviewHtml(getSiteHTML());
+    }
+
+    setIsGeneratingBackground(false);
+  }
+
+  async function regenerateProductImage(productId: string) {
+  if (!generatedData) return;
+
+  const product = generatedData.products.find(p => p.id === productId);
+  if (!product) return;
+
+  const accessKey = process.env.NEXT_PUBLIC_UNSPLASH_ACCESS_KEY || "";
+  if (!accessKey) {
+    console.error('Unsplash API key не найден!');
+    return;
+  }
+
+  try {
+    const translations: Record<string, string> = {
+      'кофе в зёрнах': 'coffee beans',
+      'кофе': 'coffee',
+      'кружка': 'ceramic mug',
+      'френч-пресс': 'french press',
+      'кофемолка ручная': 'manual coffee grinder',
+      'кофемолка': 'electric coffee grinder',
+      'сироп ванильный': 'vanilla syrup bottle',
+      'сироп': 'syrup',
+      'молоко овсяное': 'oat milk carton',
+      'молоко': 'oat milk',
+      'масло': 'motor oil',
+      'колодки': 'brake pads',
+      'фильтр': 'air filter',
+      'свеча': 'spark plug',
+      'аккумулятор': 'car battery',
+      'амортизатор': 'shock absorber',
+      'rtx': 'graphics card',
+      'nvidia': 'nvidia rtx',
+      'intel': 'intel processor',
+      'ddr5': 'ddr5 ram',
+      'ssd': 'ssd nvme',
+      'блок питания': 'power supply',
+    };
+    
+    let searchQuery = product.name.toLowerCase();
+    for (const [ru, en] of Object.entries(translations)) {
+      if (searchQuery.includes(ru)) {
+        searchQuery = en;
+        break;
+      }
+    }
+    searchQuery = encodeURIComponent(searchQuery);
+
+    const response = await fetch(
+      `https://api.unsplash.com/search/photos?query=${searchQuery}&per_page=1&orientation=landscape`,
+      {
+        headers: {
+          'Authorization': `Client-ID ${accessKey}`,
+        },
+      }
+    );
+    
+    const data = await response.json();
+    let imageUrl = '';
+    
+    if (data.results && data.results.length > 0) {
+      imageUrl = data.results[0].urls.small;
+    } else {
+      const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='800' height='600'>
+        <rect width='800' height='600' fill='#1a1a2e'/>
+        <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' 
+              fill='#00d4ff' font-family='Arial' font-size='32' font-weight='bold'>
+          ${product.name}
+        </text>
+      </svg>`;
+      imageUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+    }
+
+    const updatedProducts = generatedData.products.map((p) => {
+      if (p.id !== productId) return p;
+      return { ...p, imageUrl };
+    });
+
+    setGeneratedData(prev => prev ? ({ ...prev, products: updatedProducts }) : null);
+    
+    // Обновляем previewHtml вручную
+    setPreviewHtml(getSiteHTML());
+    setPreviewKey(prev => prev + 1);
+    
+  } catch (error) {
+    console.error('Ошибка обновления изображения:', error);
+  }
+}
+
+const getSiteHTML = () => {
+    if (!generatedData) return '';
+
+    const { name, description, products } = generatedData;
+    const safeSiteName = escapeHtml(name);
+    const safeDescription = escapeHtml(description);
+
+    const heroBackgroundImage = backgroundUrl
+      ? `<div class="hero-bg" style="background-image:url('${backgroundUrl}')"></div>`
+      : '';
+
+    const heroNeonOverlay = hasNeon
+      ? '<div class="hero-neon"></div>'
+      : '';
+
+    const productCards = products
+      .map((product) => {
+        const image = product.imageUrl
+          ? product.imageUrl
+          : makePlaceholderImage(product.name, product.category);
+
+        return `
+          <article class="card">
+            <div class="card-image">
+              <img src="${image}" alt="${escapeHtml(product.name)}">
+            </div>
+            <div class="card-info">
+              <p class="category">${escapeHtml(product.category)}</p>
+              <h3>${escapeHtml(product.name)}</h3>
+              <span class="price">${escapeHtml(product.price)}</span>
+              <button
+                type="button"
+                data-name="${escapeHtml(product.name)}"
+                data-price="${product.priceNumber}"
+                onclick="addToCart(this.dataset.name, Number(this.dataset.price || 0))"
+              >
+                В корзину
+              </button>
+            </div>
+          </article>
+        `;
+      })
+      .join('');
+
+    return `<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${safeSiteName}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{font-family:Inter,Arial,sans-serif;background:#080808;color:#fff;line-height:1.55}
+    button{font:inherit}
+    .nav{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:16px 5%;background:rgba(13,13,18,.94);backdrop-filter:blur(14px);border-bottom:1px solid rgba(0,212,255,.45)}
+    .logo{color:#00d4ff;font-size:25px;font-weight:850;letter-spacing:-.7px}
+    .nav-links{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+    .nav-links button{border:0;background:transparent;color:#ddd;cursor:pointer;font-size:14px;font-weight:650}
+    .nav-links button:hover{color:#00d4ff}
+    .cart-toggle{position:relative;border:0;border-radius:10px;background:linear-gradient(135deg,#00d4ff,#7b2cbf);color:#fff;padding:10px 14px;cursor:pointer;font-size:14px;font-weight:750}
+    .cart-count{display:inline-grid;place-items:center;min-width:21px;height:21px;margin-left:6px;padding:0 5px;border-radius:20px;background:#fff;color:#111;font-size:12px}
+    .hero{position:relative;overflow:hidden;padding:110px 5%;text-align:center;background:radial-gradient(circle at 20% 20%,rgba(0,212,255,.30),transparent 32%),radial-gradient(circle at 80% 20%,rgba(123,44,191,.36),transparent 30%),linear-gradient(135deg,#0b5b77,#431678 72%,#140625)}
+    .hero-bg{position:absolute;inset:0;width:100%;height:100%;background-size:cover;background-position:center;opacity:.35;mix-blend-mode:screen;pointer-events:none;z-index:0}
+    .hero-neon{position:absolute;inset:0;pointer-events:none;z-index:0;background:radial-gradient(circle at 30% 40%,rgba(0,212,255,.22),transparent 40%),radial-gradient(circle at 70% 35%,rgba(123,44,191,.22),transparent 42%),radial-gradient(circle at 50% 60%,rgba(0,212,255,.18),transparent 45%);filter:brightness(1.2) saturate(1.2);opacity:.9}
+    .hero-content{position:relative;z-index:1}
+    .hero h1{max-width:1000px;margin:0 auto 18px;font-size:clamp(40px,7vw,76px);line-height:1.05;letter-spacing:-2px;text-shadow:0 4px 24px rgba(0,0,0,.65)}
+    .hero p{max-width:780px;margin:0 auto;color:rgba(255,255,255,.92);font-size:clamp(17px,2vw,22px);text-shadow:0 2px 16px rgba(0,0,0,.55)}
+    .hero button{margin-top:30px;border:0;border-radius:12px;padding:15px 23px;background:#fff;color:#0d1520;font-weight:800;cursor:pointer}
+    .section{max-width:1440px;margin:0 auto;padding:84px 5%}
+    .section-title{text-align:center;font-size:clamp(32px,4vw,46px);letter-spacing:-1.2px;margin-bottom:10px}
+    .subtitle{margin:0 auto 52px;max-width:650px;color:#999;text-align:center}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:24px}
+    .card{overflow:hidden;border:1px solid #292936;border-radius:20px;background:linear-gradient(145deg,#19191f,#0e0e12);transition:transform .25s,border-color .25s,box-shadow .25s}
+    .card:hover{transform:translateY(-8px);border-color:#00d4ff;box-shadow:0 18px 45px rgba(0,212,255,.16)}
+    .card-image{height:260px;background:#111827;overflow:hidden}
+    .card-image img{width:100%;height:100%;object-fit:cover;display:block}
+    .card-info{padding:21px}
+    .category{margin-bottom:7px;color:#a1a1aa;font-size:12px;font-weight:650}
+    .card h3{min-height:54px;font-size:18px;line-height:1.35}
+    .price{display:block;margin:15px 0;color:#00d4ff;font-size:24px;font-weight:850}
+    .card button{width:100%;border:0;border-radius:11px;padding:13px;background:linear-gradient(135deg,#00c8ef,#7b2cbf);color:#fff;cursor:pointer;font-weight:800}
+    .card button:hover{filter:brightness(1.1)}
+    .benefits{background:linear-gradient(180deg,#101014,#080808)}
+    .benefit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+    .benefit{padding:30px;border:1px solid #292936;border-radius:18px;background:rgba(255,255,255,.025);text-align:center}
+    .benefit-icon{display:grid;place-items:center;width:68px;height:68px;margin:0 auto 17px;border-radius:18px;background:linear-gradient(135deg,#00d4ff,#7b2cbf);font-size:31px}
+    .benefit h3{margin-bottom:10px;font-size:19px}
+    .benefit p{color:#a1a1aa;font-size:14px}
+    .info{max-width:760px;margin:0 auto;padding:32px;border:1px solid #292936;border-radius:20px;background:#111116;color:#b9b9c4;text-align:center}
+    .info p{margin:10px 0}
+    footer{padding:38px 5%;border-top:1px solid #20202a;color:#777;text-align:center}
+    .cart-panel{position:fixed;top:0;right:0;z-index:50;width:min(420px,100vw);height:100vh;padding:24px;background:#111116;border-left:1px solid #343440;box-shadow:-20px 0 70px rgba(0,0,0,.48);transform:translateX(105%);transition:transform .25s}
+    .cart-panel.open{transform:translateX(0)}
+    .cart-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:25px}
+    .cart-head h2{font-size:23px}
+    .close{border:0;background:#24242d;color:#fff;border-radius:9px;padding:8px 11px;cursor:pointer}
+    #cart-items{display:grid;gap:12px;max-height:64vh;overflow:auto}
+    .cart-item{display:grid;grid-template-columns:1fr auto;gap:12px;padding:15px;border:1px solid #30303b;border-radius:13px;background:#19191f}
+    .cart-item-name{font-weight:750}
+    .cart-item-price{margin-top:4px;color:#00d4ff;font-size:14px}
+    .remove{height:34px;border:0;border-radius:8px;padding:0 10px;background:#3a1620;color:#ff9ca8;cursor:pointer}
+    .cart-empty{padding:34px 0;color:#999;text-align:center}
+    .cart-total{display:flex;justify-content:space-between;align-items:center;margin-top:20px;padding-top:20px;border-top:1px solid #30303b;font-size:19px;font-weight:800}
+    .cart-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+    .cart-actions button{border:0;border-radius:10px;padding:13px;cursor:pointer;font-weight:750}
+    .clear{background:#292933;color:#fff}
+    .checkout{background:linear-gradient(135deg,#00d4ff,#7b2cbf);color:#fff}
+    @media(max-width:760px){
+      .nav{padding:14px 18px}
+      .nav-links{display:none}
+      .hero{padding:82px 22px}
+      .section{padding:62px 22px}
+      .benefit-grid{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <button class="logo" onclick="scrollToSection('home')">${safeSiteName}</button>
+    <div class="nav-links">
+      <button onclick="scrollToSection('home')">Главная</button>
+      <button onclick="scrollToSection('catalog')">Каталог</button>
+      <button onclick="scrollToSection('about')">О нас</button>
+      <button onclick="scrollToSection('delivery')">Доставка</button>
+      <button onclick="scrollToSection('contact')">Контакты</button>
+    </div>
+    <button class="cart-toggle" onclick="toggleCart()">Корзина <span id="cart-count" class="cart-count">0</span></button>
+  </nav>
+
+  <main>
+    <section id="home" class="hero">
+      ${heroBackgroundImage}
+      ${heroNeonOverlay}
+      <div class="hero-content">
+        <h1>${safeSiteName}</h1>
+        <p>${safeDescription}</p>
+        <button onclick="scrollToSection('catalog')">Смотреть каталог</button>
+      </div>
+    </section>
+
+    <section id="catalog" class="section">
+      <h2 class="section-title">Каталог</h2>
+      <p class="subtitle">Выберите товары и добавьте их в корзину. Цены взяты из вашего технического задания.</p>
+      <div class="grid">
+        ${productCards}
+      </div>
+    </section>
+
+    <section id="about" class="benefits">
+      <div class="section">
+        <h2 class="section-title">Почему выбирают нас</h2>
+        <p class="subtitle">Современный сервис, понятные условия и забота о каждом заказе.</p>
+        <div class="benefit-grid">
+          <div class="benefit"><div class="benefit-icon">🚀</div><h3>Быстрая доставка</h3><p>Оперативная обработка заказов и удобные способы получения.</p></div>
+          <div class="benefit"><div class="benefit-icon">🛡️</div><h3>Гарантия качества</h3><p>Проверяем товары и помогаем решить вопрос после покупки.</p></div>
+          <div class="benefit"><div class="benefit-icon">💬</div><h3>Поддержка</h3><p>Консультации до заказа и сопровождение на каждом этапе.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="delivery" class="section">
+      <h2 class="section-title">Доставка и оплата</h2>
+      <div class="info">
+        <p>📦 Выберите курьерскую доставку, самовывоз или отправку транспортной компанией.</p>
+        <p>💳 Оплата картой, наличными при получении или по счёту.</p>
+        <p>🔄 Условия возврата и гарантии задаются под ваш бизнес.</p>
+      </div>
+    </section>
+
+    <section id="contact" class="section">
+      <h2 class="section-title">Контакты</h2>
+      <div class="info">
+        <p>📞 +7 (999) 000-00-00</p>
+        <p>✉️ info@example.ru</p>
+        <p>📍 Ваш город, адрес офиса или магазина</p>
+      </div>
+    </section>
+  </main>
+
+  <aside id="cart-panel" class="cart-panel" aria-label="Корзина">
+    <div class="cart-head">
+      <h2>Корзина</h2>
+      <button class="close" onclick="toggleCart()">✕</button>
+    </div>
+    <div id="cart-items"><p class="cart-empty">Корзина пока пуста</p></div>
+    <div class="cart-total"><span>Итого:</span><span id="cart-total">0 ₽</span></div>
+    <div class="cart-actions">
+      <button class="clear" onclick="clearCart()">Очистить</button>
+      <button class="checkout" onclick="checkout()">Оформить</button>
+    </div>
+  </aside>
+
+  <footer>© 2026 ${safeSiteName}. Сайт создан в Web Studio.</footer>
+
+  <script>
+    const cart = [];
+
+    function formatPrice(value) {
+      return new Intl.NumberFormat('ru-RU').format(value || 0) + ' ₽';
+    }
+
+    function scrollToSection(id) {
+      const section = document.getElementById(id);
+      if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function toggleCart() {
+      document.getElementById('cart-panel').classList.toggle('open');
+    }
+
+    function addToCart(name, price) {
+      const existing = cart.find((item) => item.name === name);
+
+      if (existing) {
+        existing.quantity += 1;
+      } else {
+        cart.push({ name, price, quantity: 1 });
+      }
+
+      renderCart();
+      document.getElementById('cart-panel').classList.add('open');
+    }
+
+    function removeFromCart(index) {
+      cart.splice(index, 1);
+      renderCart();
+    }
+
+    function clearCart() {
+      cart.splice(0, cart.length);
+      renderCart();
+    }
+
+    function renderCart() {
+      const container = document.getElementById('cart-items');
+      const count = cart.reduce((sum, item) => sum + item.quantity, 0);
+      const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+      document.getElementById('cart-count').textContent = count;
+      document.getElementById('cart-total').textContent = formatPrice(total);
+
+      if (!cart.length) {
+        container.innerHTML = '<p class="cart-empty">Корзина пока пуста</p>';
+        return;
+      }
+
+      container.innerHTML = cart
+        .map((item, index) => '<div class="cart-item"><div><p class="cart-item-name">' + item.name + ' × ' + item.quantity + '</p><p class="cart-item-price">' + formatPrice(item.price * item.quantity) + '</p></div><button class="remove" onclick="removeFromCart(' + index + ')">Удалить</button></div>')
+        .join('');
+    }
+
+    function checkout() {
+      if (!cart.length) {
+        alert('Добавьте хотя бы один товар в корзину.');
+        return;
+      }
+
+      alert('Демо-оформление заказа. Следующий этап — подключение формы заказа и оплаты.');
+    }
+  </script>
+</body>
+</html>`;
+  };
+
+  const handleDownload = () => {
+    const html = getSiteHTML();
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = `${generatedData?.name.replace(/\s+/g, '-').toLowerCase() || 'generated-site'}.html`;
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+  };
+
+  const handleOpenNewTab = () => {
+    const html = getSiteHTML();
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  if (showPreview) {
+    return (
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-success/10">
+              <CheckCircle size={24} className="text-success" />
+            </div>
+            <div>
+              <h1 className="text-[24px] font-bold text-foreground">Сайт сгенерирован!</h1>
+              <p className="text-[14px] text-muted-foreground">
+                Сгенерируй изображения товаров и фон, затем скачай готовый сайт.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={generateProductImages}
+              disabled={isGeneratingImages || !generatedData}
+              className={`flex items-center gap-2 rounded-xl px-5 py-3 font-semibold transition-colors ${
+                isGeneratingImages || !generatedData
+                  ? 'cursor-not-allowed bg-muted text-muted-foreground'
+                  : 'bg-primary text-primary-foreground hover:bg-primary/90'
+              }`}
+            >
+              <Image size={18} />
+              {isGeneratingImages ? 'Генерация...' : 'Сгенерировать изображения'}
+            </button>
+
+            <button
+              onClick={generateBackground}
+              disabled={isGeneratingBackground || !generatedData}
+              className={`flex items-center gap-2 rounded-xl px-5 py-3 font-semibold transition-colors ${
+                isGeneratingBackground || !generatedData
+                  ? 'cursor-not-allowed bg-muted text-muted-foreground'
+                  : 'bg-primary/10 text-primary hover:bg-primary/20'
+              }`}
+            >
+              <Wand2 size={18} />
+              {isGeneratingBackground ? 'Генерация...' : 'Сгенерировать фон'}
+            </button>
+
+            <button
+              onClick={handleDownload}
+              className="flex items-center gap-2 rounded-xl bg-success px-5 py-3 font-semibold text-success-foreground transition-colors hover:bg-success/90"
+            >
+              <Download size={18} />
+              Скачать HTML
+            </button>
+
+            <button
+              onClick={handleOpenNewTab}
+              className="flex items-center gap-2 rounded-xl border border-border bg-muted px-5 py-3 font-semibold text-foreground transition-colors hover:bg-muted/80"
+            >
+              <ExternalLink size={18} />
+              Открыть отдельно
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-border bg-card">
+          <div className="flex items-center gap-2 border-b border-border bg-muted/50 p-3">
+            <div className="flex gap-2">
+              <span className="h-3 w-3 rounded-full bg-red-500" />
+              <span className="h-3 w-3 rounded-full bg-yellow-500" />
+              <span className="h-3 w-3 rounded-full bg-green-500" />
+            </div>
+            <span className="flex-1 text-center font-mono text-[11px] text-muted-foreground">
+              generated-site-preview
+            </span>
+          </div>
+
+          <iframe
+            key={previewKey}
+            srcDoc={previewHtml || getSiteHTML()}
+            className="h-[720px] w-full border-0"
+            title="Предпросмотр сгенерированного сайта"
+            sandbox="allow-scripts allow-modals"
+            onLoad={(e) => {
+              const doc = e.currentTarget.contentDocument;
+              if (doc) doc.body.offsetHeight;
+            }}
+          />
+        </div>
+
+        {generatedData && (
+          <div className="mt-6 rounded-2xl border border-border bg-card p-6">
+            <h2 className="mb-4 text-[18px] font-bold text-foreground">Изображения товаров</h2>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              {generatedData.products.map((product) => (
+                <div
+                  key={product.id}
+                  className="overflow-hidden rounded-xl border border-border bg-background"
+                >
+                  <div className="aspect-square bg-muted">
+                    {product.imageUrl ? (
+                      <img
+                        src={product.imageUrl}
+                        alt={product.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-muted-foreground">
+                        Нет изображения
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3">
+                    <p className="mb-1 text-[13px] font-semibold text-foreground">
+                      {product.name}
+                    </p>
+                    <p className="mb-3 text-[12px] text-muted-foreground">
+                      {product.category}
+                    </p>
+
+                    <button
+                      onClick={() => regenerateProductImage(product.id)}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-muted px-3 py-2 text-[12px] font-semibold text-foreground transition-colors hover:bg-muted/80"
+                    >
+                      <Wand2 size={14} />
+                      Обновить картинку
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-6 flex items-center justify-between">
+          <button
+            onClick={() => setShowPreview(false)}
+            className="rounded-lg border border-border bg-background px-6 py-3 font-medium text-foreground transition-colors hover:bg-muted/50"
+          >
+            ← Вернуться к ТЗ
+          </button>
+
+          <button
+            onClick={onComplete}
+            className="rounded-xl bg-success px-8 py-3 font-semibold text-success-foreground transition-colors hover:bg-success/90"
+          >
+            Начать новый проект
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto">
+      <div className="mb-8">
+        <div className="mb-3 flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+            <Sparkles size={24} className="text-primary" />
+          </div>
+          <div>
+            <h1 className="text-[24px] font-bold text-foreground">Быстрая генерация</h1>
+            <p className="text-[14px] text-muted-foreground">
+              Выбери шаблон или вставь подробное ТЗ.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-6 grid gap-3 md:grid-cols-4">
+        {templates.map((template) => {
+          const Icon = template.icon;
+          const isSelected = selectedTemplate === template.id;
+
+          return (
+            <button
+              key={template.id}
+              onClick={() => handleSelectTemplate(template.id)}
+              className={`flex flex-col items-center gap-2 rounded-xl border p-4 transition-all ${
+                isSelected
+                  ? 'border-primary/50 bg-primary/10'
+                  : 'border-border bg-card hover:border-primary/30'
+              }`}
+            >
+              <Icon size={24} className={isSelected ? 'text-primary' : 'text-foreground'} />
+              <span className={`text-[13px] font-medium ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                {template.name}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mb-6 rounded-2xl border border-border bg-card p-8">
+        <label className="mb-3 block text-[15px] font-semibold text-foreground">
+          Подробное техническое задание
+        </label>
+
+        <textarea
+          value={tz}
+          onChange={(event) => setTz(event.target.value)}
+          placeholder={`Название: TechParts Pro
+
+Видеокарты:
+1. NVIDIA RTX 5090 — 189 990₽
+2. NVIDIA RTX 5080 — 129 990₽
+
+Процессоры:
+3. Intel Core i9 — 59 990₽
+
+Описание: Премиум магазин компьютерных комплектующих для геймеров.`}
+          className="h-96 w-full resize-none rounded-xl border border-border bg-background p-4 font-mono text-[13px] leading-relaxed text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+        />
+
+        {isGenerating && (
+          <div className="mt-6">
+            <div className="mb-3 flex items-center gap-3">
+              <Loader size={20} className="animate-spin text-primary" />
+              <p className="text-[14px] font-medium text-foreground">
+                Собираем структуру, каталог и интерактивное превью…
+              </p>
+            </div>
+
+            <div className="h-2 overflow-hidden rounded-full bg-muted/50">
+              <div
+                className="h-full rounded-full bg-primary transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+
+            <p className="mt-2 text-center text-[12px] text-muted-foreground">
+              {progress}%
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="mb-6 rounded-xl border border-border bg-muted/50 p-4">
+        <p className="text-[13px] text-muted-foreground">
+          Совет: указывай товары отдельными строками в формате{' '}
+          <code>Название товара — 189 990₽</code>. Тогда генератор перенесёт
+          названия и цены в каталог без случайных значений.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <button
+          onClick={onBack}
+          className="rounded-lg border border-border bg-background px-6 py-3 font-medium text-foreground transition-colors hover:bg-muted/50"
+        >
+          ← Назад
+        </button>
+
+        <button
+          onClick={handleGenerate}
+          disabled={!tz.trim() || isGenerating}
+          className={`flex items-center gap-2 rounded-lg px-8 py-3 text-[14px] font-semibold transition-all ${
+            tz.trim() && !isGenerating
+              ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+              : 'cursor-not-allowed bg-muted text-muted-foreground'
+          }`}
+        >
+          <Sparkles size={18} />
+          {isGenerating ? 'Генерация…' : 'Сгенерировать сайт'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

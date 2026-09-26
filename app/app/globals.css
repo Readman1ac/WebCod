@@ -1,0 +1,111 @@
+﻿@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0f1726;
+  --foreground: #f8fafc;
+  --card: #1c293d;
+  --card-hover: #223149;
+  --border: #33445c;
+  --muted: #233147;
+  --muted-foreground: #9aabc1;
+  --primary: #f58a2a;
+  --primary-foreground: #101827;
+  --secondary: #5b8def;
+  --secondary-foreground: #ffffff;
+  --success: #24c66a;
+  --warning: #f4b740;
+  --error: #ef5b65;
+  --sidebar: #111b2d;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  min-height: 100%;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.font-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-transition {
+  transition: width 0.2s ease;
+}
+
+.card-hover {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  background: var(--card-hover);
+  border-color: rgba(245, 138, 42, 0.28);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+}
+
+.pulse-dot {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(36, 198, 106, 0.4);
+  }
+
+  50% {
+    opacity: 0.75;
+    box-shadow: 0 0 0 6px rgba(36, 198, 106, 0);
+  }
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 999px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}

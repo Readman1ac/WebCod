@@ -1,0 +1,149 @@
+﻿'use client';
+
+import React, { useState, useEffect } from 'react';
+import { Package, FolderOpen, CheckCircle, Loader, ChevronRight } from 'lucide-react';
+
+const initialTasks = [
+  { id: 'task-01', name: 'Компиляция HTML', status: 'pending' as const },
+  { id: 'task-02', name: 'Минификация CSS', status: 'pending' as const },
+  { id: 'task-03', name: 'Сборка JavaScript', status: 'pending' as const },
+  { id: 'task-04', name: 'Оптимизация изображений', status: 'pending' as const },
+  { id: 'task-05', name: 'Генерация sitemap.xml', status: 'pending' as const },
+];
+
+export default function WebStudioStep7({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+  const [tasks, setTasks] = useState(initialTasks);
+  const [isComplete, setIsComplete] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const runTask = async (index: number) => {
+      await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1000));
+      
+      setTasks(prev => prev.map((t, i) => 
+        i === index ? { ...t, status: 'generating' as const } : t
+      ));
+      
+      await new Promise(resolve => setTimeout(resolve, 600 + Math.random() * 800));
+      
+      setTasks(prev => prev.map((t, i) => 
+        i === index ? { ...t, status: 'done' as const } : t
+      ));
+      
+      setProgress(prev => prev + 20);
+      
+      if (index === initialTasks.length - 1) {
+        setIsComplete(true);
+      }
+    };
+
+    initialTasks.forEach((_, index) => {
+      setTimeout(() => runTask(index), index * 1200);
+    });
+  }, []);
+
+  const currentTask = tasks.find(t => t.status === 'generating');
+  const completedCount = tasks.filter(t => t.status === 'done').length;
+
+  return (
+    <div className="max-w-4xl mx-auto">
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Package size={24} className="text-primary" />
+          </div>
+          <div>
+            <h1 className="text-[24px] font-bold text-foreground">Сборка проекта</h1>
+            <p className="text-[14px] text-muted-foreground">Шаг 7 из 9 · Оптимизация</p>
+          </div>
+        </div>
+        <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
+          <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+        </div>
+      </div>
+
+      {/* Progress */}
+      <div className="bg-card border border-border rounded-xl p-6 mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          {isComplete ? <CheckCircle size={20} className="text-success" /> : <Loader size={20} className="text-primary animate-spin" />}
+          <div>
+            <p className="text-[15px] font-semibold text-foreground">
+              {isComplete ? 'Сборка завершена!' : 'Собираем проект...'}
+            </p>
+            <p className="text-[13px] text-muted-foreground">Оптимизация и подготовка файлов</p>
+          </div>
+        </div>
+        <div className="h-2 bg-muted/50 rounded-full overflow-hidden mb-3">
+          <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+        </div>
+        <p className="text-[12px] text-muted-foreground">{completedCount} из 5 задач выполнено</p>
+      </div>
+
+      {/* Tasks */}
+      <div className="bg-card border border-border rounded-xl p-6 mb-6">
+        <h2 className="text-[18px] font-semibold text-foreground mb-4">Задачи сборки</h2>
+        <div className="space-y-2">
+          {tasks.map((task) => (
+            <div key={task.id} className="flex items-center gap-4 p-4 rounded-lg bg-background border border-border">
+              <div className="w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center flex-shrink-0">
+                {task.status === 'done' ? <CheckCircle size={18} className="text-success" /> : <Loader size={18} className="text-primary animate-spin" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] font-semibold text-foreground">{task.name}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {task.status === 'done' && (
+                  <span className="text-[11px] text-success flex items-center gap-1">
+                    <CheckCircle size={12} /> Готово
+                  </span>
+                )}
+                {task.status === 'generating' && (
+                  <span className="text-[11px] text-primary flex items-center gap-1">
+                    <Loader size={12} className="animate-spin" /> Выполняется
+                  </span>
+                )}
+                {task.status === 'pending' && (
+                  <span className="text-[11px] text-muted-foreground">Ожидание</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Output */}
+      <div className="bg-card border border-border rounded-xl p-6 mb-6">
+        <h2 className="text-[18px] font-semibold text-foreground mb-4">Вывод сборки</h2>
+        <div className="p-4 rounded-lg bg-[#1e1e1e] border border-border font-mono text-[11px] text-[#9cdcfe] overflow-x-auto max-h-48 overflow-y-auto scrollbar-thin">
+          <pre>{tasks.filter(t => t.status === 'done').map(t => `✓ ${t.name}`).join('\n') || '⏳ Ожидание...'}</pre>
+        </div>
+      </div>
+
+      {/* Submit */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 px-6 py-3 rounded-lg bg-background border border-border text-[14px] font-medium text-foreground hover:bg-muted/50 transition-all"
+        >
+          ← Назад
+        </button>
+        <button
+          onClick={onNext}
+          disabled={!isComplete}
+          className={`flex items-center gap-2 px-6 py-3 rounded-lg text-[14px] font-semibold transition-all ${
+            isComplete
+              ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+              : 'bg-muted text-muted-foreground cursor-not-allowed'
+          }`}
+        >
+          Продолжить
+          <ChevronRight size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
